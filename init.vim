@@ -7,19 +7,29 @@ Jetpack 'nvim-telescope/telescope.nvim'
 Jetpack 'vim-jp/vimdoc-ja'
 Jetpack 'thinca/vim-qfreplace'
 Jetpack 'lambdalisue/fern.vim'
+Jetpack 'lambdalisue/gin.vim'
 Jetpack 'folke/tokyonight.nvim'
 Jetpack 'EdenEast/nightfox.nvim'
 Jetpack 'cohama/lexima.vim'
 Jetpack 'machakann/vim-sandwich'
 Jetpack 'hrsh7th/nvim-cmp'
+Jetpack 'hrsh7th/cmp-nvim-lsp'
+Jetpack 'hrsh7th/cmp-nvim-lsp-document-symbol'
+Jetpack 'hrsh7th/cmp-nvim-lsp-signature-help'
+Jetpack 'hrsh7th/cmp-nvim-lua'
 Jetpack 'hrsh7th/cmp-buffer'
 Jetpack 'hrsh7th/cmp-path'
 Jetpack 'hrsh7th/cmp-cmdline'
 Jetpack 'hrsh7th/cmp-vsnip'
+Jetpack 'hrsh7th/cmp-calc'
+Jetpack 'hrsh7th/cmp-emoji'
 Jetpack 'hrsh7th/vim-vsnip'
 Jetpack 'neovim/nvim-lspconfig'
 Jetpack 'williamboman/mason.nvim'
 Jetpack 'williamboman/mason-lspconfig.nvim'
+Jetpack 'onsails/lspkind-nvim'
+Jetpack 'petertriho/cmp-git'
+Jetpack 'vim-denops/denops.vim'
 call jetpack#end()
 
 for plugin in jetpack#names()
@@ -42,6 +52,8 @@ noremap <Space>ff <Cmd>Telescope find_files<CR>
 noremap <Space>fh <Cmd>Telescope help_tags<CR>
 noremap <Space>fw <Cmd>Telescope live_grep<CR>
 noremap <Space>e <Cmd>Fern . -reveal=%<CR>
+noremap <Space>aa <Cmd>GinStatus<CR>
+noremap <Space>ac <Cmd>Gin commit -v<CR>
 
 let g:fern#hide_cursor = v:true
 let g:fern#default_hidden = v:true
@@ -50,54 +62,85 @@ let g:fern#default_hidden = v:true
 set completeopt=menu,menuone,noselect
 
 lua <<EOF
-  local cmp = require'cmp'
+  local lspkind = require'lspkind'
 
-  -- Global setup.
-  cmp.setup({
+  local cmp = require'cmp'
+  cmp.setup {
     snippet = {
       expand = function(args)
-        vim.fn["vsnip#anonymous"](args.body) -- For `vsnip` users.
-        -- require('luasnip').lsp_expand(args.body) -- For `luasnip` users.
-        -- require'snippy'.expand_snippet(args.body) -- For `snippy` users.
-        -- vim.fn["UltiSnips#Anon"](args.body) -- For `ultisnips` users.
-      end,
+        vim.fn['vsnip#anonymous'](args.body)
+      end
     },
     window = {
-      -- completion = cmp.config.window.bordered(),
-      -- documentation = cmp.config.window.bordered(),
+   
+      completion = {
+        -- border = 'single',
+      },
+      documentation = {
+        -- border = 'single',
+      },
     },
-    mapping = cmp.mapping.preset.insert({
-      ['<C-d>'] = cmp.mapping.scroll_docs(-4),
-      ['<C-f>'] = cmp.mapping.scroll_docs(4),
-      ['<C-Space>'] = cmp.mapping.complete(),
-      ['<CR>'] = cmp.mapping.confirm({ select = true }),
-    }),
+    formatting = {
+      fields = { 'kind', 'abbr', 'menu', },
+      format = require("lspkind").cmp_format({
+        with_text = false,
+      })
+    },
+    mapping = {
+      ['<C-o>'] = cmp.mapping(function(fallback)
+        local fallback_key = vim.api.nvim_replace_termcodes('<Tab>', true, true, true)
+        local resolved_key = vim.fn['copilot#Accept'](fallback)
+        if fallback_key == resolved_key then
+          cmp.confirm({ select = true })
+        else
+          vim.api.nvim_feedkeys(resolved_key, 'n', true)
+        end
+      end),
+      ['<C-d>'] = cmp.mapping(cmp.mapping.scroll_docs(-4), { 'i', 'c' }),
+      ['<C-f>'] = cmp.mapping(cmp.mapping.scroll_docs(4), { 'i', 'c' }),
+      ['<C-Space>'] = cmp.mapping(cmp.mapping.complete(), { 'i' }),
+      ['<C-e>'] = cmp.mapping({
+        i = cmp.mapping.abort(),
+        c = cmp.mapping.close(),
+      }),
+      ['<C-y>'] = cmp.mapping.confirm({ select = true, behavior = cmp.ConfirmBehavior.Replace }),
+      ['<CR>'] = cmp.mapping.confirm({ select = true, behavior = cmp.ConfirmBehavior.Insert }),
+    },
     sources = cmp.config.sources({
-      { name = 'vsnip' }, -- For vsnip users.
-      -- { name = 'luasnip' }, -- For luasnip users.
-      -- { name = 'snippy' }, -- For snippy users.
-      -- { name = 'ultisnips' }, -- For ultisnips users.
+      { name = 'nvim_lsp_signature_help' },
+    }, {
+      { name = 'path' },
+    }, {
+      { name = 'nvim_lsp' },
+    }, {
+      { name = 'calc' },
+      { name = 'vsnip' },
+      { name = 'emoji' },
+    }, {
+      { name = 'buffer' },
+    })
+  }
+  cmp.setup.filetype('gitcommit', {
+    sources = require('cmp').config.sources({
+      { name = 'cmp_git' },
     }, {
       { name = 'buffer' },
     })
   })
+  require('cmp_git').setup({})
 
-  -- `/` cmdline setup.
   cmp.setup.cmdline('/', {
-    mapping = cmp.mapping.preset.cmdline(),
     sources = {
-      { name = 'buffer' }
-    }
+      { name = 'nvim_lsp_document_symbol' },
+      { name = 'buffer' },
+    },
   })
-
-  -- `:` cmdline setup.
   cmp.setup.cmdline(':', {
-    mapping = cmp.mapping.preset.cmdline(),
     sources = cmp.config.sources({
-      { name = 'path' }
+      { name = 'path' },
     }, {
-      { name = 'cmdline' }
-    })
+      { name = 'cmdline' },
+    }),
   })
 EOF
 
@@ -106,7 +149,11 @@ lua <<EOF
   require("mason-lspconfig").setup()
   require("mason-lspconfig").setup_handlers({
     function(server_name)
-      require("lspconfig")[server_name].setup({})
+      require("lspconfig")[server_name].setup({
+        on_attach=function(client, bufnr)
+          vim.keymap.set("n", "K", vim.lsp.buf.hover, {buffer=bufnr})
+        end
+      })
     end
   })
 EOF
